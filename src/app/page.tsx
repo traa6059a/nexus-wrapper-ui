@@ -1,148 +1,111 @@
 'use client'
-import { Text, Container, Heading, Select, FormHelperText, FormControl, Box, FormLabel, SimpleGrid, Button } from '@chakra-ui/react'
-import Editor, { DiffEditor, useMonaco, loader } from '@monaco-editor/react';
-import { useRef, useState } from 'react';
+import { packageManagers } from '@/consts';
+import { PackageManager } from '@/types';
+import {
+  Text, Heading,
+  Select,
+  FormHelperText,
+  FormControl, Box, FormLabel, SimpleGrid, Button,
+  useColorMode,
+  useToast
+} from '@chakra-ui/react'
+import Editor, { } from '@monaco-editor/react';
+import { useEffect, useRef, useState } from 'react';
 
-const packageProviders = [
-  {
-    name: "NuGet",
-    package: {
-      language: "xml",
-      format: `
-<Project Sdk="Microsoft.Net.Sdk">
-  <ItemGroup>
-    <PackageReference Include="{PACKAGE_NAME}" Version="{PACKAGE_VERSION}" />
-  </ItemGroup>
-</Project>
-      `.trim(),
-      versions: ["net8.0", "net7.0", "net6.0", "net5.0"],
-    }
-  },
-  {
-    name: "NPM",
-    package: {
-      language: "json",
-      format: `
-{
-    "name": "demo",
-    "version": "1.0.0",
-    "dependencies": {
-      "{PACKAGE_NAME}": "{PACKAGE_VERSION}"
-    }
-  }
-      `.trim(),
-      versions: ["22", "20", "18"],
-
-    }
-  },
-  {
-    name: "Maven",
-    package: {
-      language: "xml",
-      format: `
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>com.example</groupId>
-    <artifactId>demo</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <dependencies>
-        <dependency>
-            <groupId>{PACKAGE_NAME}</groupId>
-            <artifactId>{PACKAGE_ARTIFACT_ID}</artifactId>
-            <version>{PACKAGE_VERSION}</version>
-        </dependency>
-    </dependencies>
-</project>
-      `.trim(),
-      versions: ["22", "17", "11", "8"],
-    }
-  },
-  {
-    name: "Pypi",
-    package: {
-      language: "markdown",
-      format: `
-Flask
-docker
-      `.trim(),
-      versions: ["3.12", "3.11", "3.10", "3.9"],
-
-    }
-  },
-  {
-    name: "Docker Hub",
-    package: {
-      language: "",
-      format: "",
-      versions: ["net8.0", "net7.0", "net6.0", "net5.0"],
-    },
-    disabled: true,
-  },
-  {
-    name: "Helm Chart",
-    package: {
-      language: "yaml",
-      format: "",
-      versions: [],
-    },
-    disabled: true,
-  }
-] as Array<{ name: string, package: { language: string, format: string, versions: string[] }, disabled: boolean }>
+interface MonacoEditor {
+  getValue(): string;
+}
 
 export default function Page() {
 
-  const [provider, setProvider] = useState<string>()
-  const packageProvider = packageProviders.find(x => x.name == provider)
-  const monacoRef = useRef(null);
+  const [packageManager, setPackageManager] = useState<PackageManager>()
+  const [languageVersion, setLanguageVersion] = useState<string | undefined>()
+  const [error, setError] = useState<string>()
+  const { colorMode, toggleColorMode } = useColorMode()
+  const toast = useToast()
 
-  function handleEditorWillMount(monaco: any) {
-    // here is the monaco instance
-    // do something before editor is mounted
-    monaco.languages.typescript.javascriptDefaults.setEagerModelSync(true);
-  }
+  useEffect(() => {
+    if (packageManager)
+      setLanguageVersion(packageManager?.package.versions[0])
+  }, [packageManager])
 
-  function handleEditorDidMount(editor: any, monaco: any) {
-    // here is another way to get monaco instance
-    // you can also store it in `useRef` for further usage
-    monacoRef.current = monaco;
+  const editorRef = useRef<MonacoEditor | null>(null);
+
+  function handleEditorDidMount(editor: MonacoEditor) {
+    editorRef.current = editor;
   }
 
   const handleEditorValidation = (markers: any) => {
-    // model markers
-    markers.forEach((marker: any) => console.log('onValidate:', marker.message));
+    let error = "";
+    markers.forEach((marker: any) => error += marker.message + ".\n\r");
+    setError(error);
+  }
+  const download = () => {
+    fetch(`${process.env.NEXT_PUBLIC_NEXUS_FETCHER_API_ENDPOINT}/upload?language=${packageManager!.name.toLowerCase()}&version=${languageVersion!}`, {
+      method: 'POST',
+      body: editorRef.current!.getValue(),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+      .then(res => {
+        if (res.status != 200)
+          throw new Error("has an error")
+
+        toast({
+          title: 'Your request has been reach to server!',
+          description: "Waiting to finalization...",
+          status: 'success',
+          duration: 9000,
+          isClosable: true,
+        })
+      })
+      .catch(error => {
+        toast({
+          title: 'Error',
+          description: "",
+          status: 'error',
+          duration: 9000,
+          isClosable: true,
+        })
+      });
   }
   return (
     <Box p={100}>
+      <Box>
+        <Button onClick={toggleColorMode}>
+          Toggle {colorMode === 'light' ? 'Dark' : 'Light'}
+        </Button>
+      </Box>
       <Box mb={10}>
-        <Heading textAlign='center' mb={10}>Nexus wrapper ui</Heading>
+        <Heading textAlign='center' mb={10}>Nexus Fetcher</Heading>
         <Text>
-          There are many benefits to a joint design and development system.
+          <strong>Nexus fetcher</strong> is a powerful and intuitive tool designed for seamless downloading and management of packages from Nexus repositories. Whether you{"'"}re working on a software development project or managing multiple dependencies, Nexus-Fetcher simplifies the process by providing a streamlined solution for retrieving and organizing packages.
         </Text>
       </Box>
-      <SimpleGrid columns={packageProvider === undefined ? 1 : 2}>
+      <SimpleGrid columns={packageManager === undefined ? 1 : 2}>
         <Box maxW='sm'>
           <FormControl>
             <FormLabel>Package managers of language</FormLabel>
-            <Select onChange={(e) => {
-              setProvider(e.target.value);
+            <Select defaultValue={""} onChange={(e) => {
+              setPackageManager(packageManagers.find(x => x.name === e.target.value))
             }}>
-              <option selected disabled>Select provider</option>
-              {packageProviders.map((provider => (
-                <option disabled={provider.disabled} key={provider.name} value={provider.name}>{provider.name}</option>
+              <option value={""} disabled>Select package managers</option>
+              {packageManagers.map((manager => (
+                <option disabled={manager.disabled} key={manager.name} value={manager.name}>{manager.name}</option>
               )))}
             </Select>
             <FormHelperText>such as NPM, Pypi, Maven, etc.</FormHelperText>
           </FormControl>
         </Box>
-        {!!packageProvider && (
+        {!!packageManager && (
           <Box maxW='sm'>
             <FormControl>
               <FormLabel>Versions of language</FormLabel>
               <Select onChange={(e) => {
-              }} defaultValue={packageProvider.package.versions[0]}>
-                {packageProvider.package.versions.map((version => (
+                setLanguageVersion(e.target.value)
+              }} defaultValue={packageManager!.package.versions[0]}>
+                {packageManager.package.versions.map((version => (
                   <option key={version} value={version}>{version}</option>
                 )))}
               </Select>
@@ -151,21 +114,25 @@ export default function Page() {
         )}
 
       </SimpleGrid>
-      {(!!packageProvider) && (
+      {(!!packageManager) && (
         <Box mt={10}>
           <FormControl>
             <FormLabel>Format of package manager</FormLabel>
             <Editor height="30vh"
-              language={packageProvider!.package.language}
-              value={packageProvider!.package.format}
-              beforeMount={handleEditorWillMount}
+              language={packageManager!.package.language}
+              value={packageManager!.package.format}
               onMount={handleEditorDidMount}
+              onValidate={handleEditorValidation}
+              theme={colorMode === 'light' ? "light" : "vs-dark"}
             />
+            {error && (
+              <FormHelperText color="red">Format error: {error}</FormHelperText>
+            )}
           </FormControl>
         </Box>
       )}
-      <Box>
-        <Button visibility={!!!packageProvider ? "hidden" : "visible"}>Download</Button>
+      <Box mt={10}>
+        <Button onClick={download} isDisabled={!!error} visibility={!!!packageManager ? "hidden" : "visible"}>Download</Button>
       </Box>
     </Box>
   )
