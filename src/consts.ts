@@ -2,20 +2,6 @@ import { PackageManager } from "./types";
 
 const packageManagers = [
     {
-        name: "NuGet",
-        package: {
-            language: "xml",
-            format: `
-<Project Sdk="Microsoft.Net.Sdk">
-  <ItemGroup>
-    <PackageReference Include="{PACKAGE_NAME}" Version="{PACKAGE_VERSION}" />
-  </ItemGroup>
-</Project>
-        `.trim(),
-            versions: ["net8.0", "net7.0", "net6.0", "net5.0"],
-        }
-    },
-    {
         name: "NPM",
         package: {
             language: "json",
@@ -27,7 +13,7 @@ const packageManagers = [
 }
         `.trim(),
             versions: ["22", "20", "18"],
-        }
+        },
     },
     {
         name: "Maven",
@@ -51,7 +37,8 @@ const packageManagers = [
 </project>
         `.trim(),
             versions: ["17", "11", "8"],
-        }
+        },
+        disabled: true,
     },
     {
         name: "Pypi",
@@ -62,8 +49,8 @@ Flask
 docker
         `.trim(),
             versions: ["3.12", "3.11", "3.10", "3.9"],
-
-        }
+        },
+        disabled: true,
     },
     {
         name: "Docker Hub",
@@ -80,6 +67,21 @@ docker
             language: "yaml",
             format: "",
             versions: [],
+        },
+        disabled: true,
+    },
+    {
+        name: "NuGet",
+        package: {
+            language: "xml",
+            format: `
+<Project Sdk="Microsoft.Net.Sdk">
+  <ItemGroup>
+    <PackageReference Include="{PACKAGE_NAME}" Version="{PACKAGE_VERSION}" />
+  </ItemGroup>
+</Project>
+        `.trim(),
+            versions: ["net8.0", "net7.0", "net6.0", "net5.0"],
         },
         disabled: true,
     }

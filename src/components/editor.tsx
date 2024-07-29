@@ -14,7 +14,6 @@ export const Editore = ({ packageManager, setIsValid, editorRef }: {
     setIsValid: Dispatch<SetStateAction<boolean>>,
     editorRef: MutableRefObject<MonacoEditor | null>
 }) => {
-    console.log("editoring", packageManager.package.format);
     const { colorMode } = useColorMode()
     const [error, setError] = useState<string>()
 

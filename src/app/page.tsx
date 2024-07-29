@@ -1,8 +1,11 @@
 'use client'
 import { download } from '@/actions/apis';
 import { Editore } from '@/components/editor';
+import { FileSelection } from '@/components/file-selection';
+import { RequireSpan } from '@/components/require-span';
+import { SinglePackageSelection } from '@/components/single-package-selection';
 import { packageManagers } from '@/consts';
-import { PackageManager, MonacoEditor, Mode } from '@/types';
+import { PackageManager, MonacoEditor, Mode, Form } from '@/types';
 import {
   Text, Heading,
   Select,
@@ -13,9 +16,20 @@ import {
   Radio,
   Stack,
   RadioGroup,
-  Input
+  FormErrorMessage
 } from '@chakra-ui/react'
 import { useEffect, useRef, useState } from 'react';
+import { SubmitHandler, useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+
+const schema = z.object({
+  packageManager: z.string().min(1, { message: 'Required' }),
+  packageManagerVersion: z.string().min(1, { message: 'Required' }),
+  packageName: z.string(),
+  packageVersion: z.string(),
+  groupId: z.string().default(''),
+});
 
 export default function Page() {
 
@@ -28,15 +42,63 @@ export default function Page() {
   const { colorMode, toggleColorMode } = useColorMode()
   const toast = useToast()
 
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<Form>({
+    resolver: zodResolver(schema),
+  });
   useEffect(() => {
     if (packageManager)
       setLanguageVersion(packageManager?.package.versions[0])
   }, [packageManager])
 
+  const onSubmit: SubmitHandler<Form> = async (data) => {
+    debugger;
+    toast({
+      title: 'Your request has been reach to server!',
+      description: "Waiting to finalization...",
+      status: 'success',
+      duration: 9000,
+      isClosable: true,
+    })
 
+    let content = '';
+
+    if (data.mode == Mode.Multiple) {
+      content = editorRef.current!.getValue()
+    }
+    else {
+      let packageManager = packageManagers.find(x => x.name === data.packageManager);
+      content = packageManager!.package.format.replace("{PACKAGE_NAME}", data.packageName!)
+        .replace("{PACKAGE_VERSION}", data.packageVersion!);
+    }
+
+    const res = await download(packageManager!.name.toLowerCase(),
+      languageVersion!,
+      content)
+    if (res.isSuccess) {
+      toast({
+        title: 'Package has been added',
+        description: "Successfully is completed.",
+        status: 'success',
+        duration: 9000,
+        isClosable: true,
+      })
+    } else {
+      toast({
+        title: 'Error',
+        description: "",
+        status: 'error',
+        duration: 9000,
+        isClosable: true,
+      })
+    }
+  }
 
   return (
-    <Box p={100}>
+    <form style={{ padding: 100 }} onSubmit={handleSubmit(onSubmit)}>
       <Box>
         <Button onClick={toggleColorMode}>
           Toggle {colorMode === 'light' ? 'Dark' : 'Light'}
@@ -62,8 +124,8 @@ export default function Page() {
       <SimpleGrid columns={5}>
         <Box>
           <FormControl>
-            <FormLabel>Package managers of language <RequiredSpan /></FormLabel>
-            <Select defaultValue={""} onChange={(e) => {
+            <FormLabel>Package managers of language <RequireSpan /></FormLabel>
+            <Select {...register('packageManager')} defaultValue={""} onChange={(e) => {
               setPackageManager(packageManagers.find(x => x.name === e.target.value))
             }}>
               <option value={""} disabled>Select package managers</option>
@@ -72,50 +134,29 @@ export default function Page() {
               )))}
             </Select>
             <FormHelperText>such as NPM, Pypi, Maven, etc.</FormHelperText>
+            {errors.packageManager?.message && <FormErrorMessage>{errors.packageManager?.message}</FormErrorMessage>}
           </FormControl>
         </Box>
         {!!packageManager && (
           <Box width={100}>
             <FormControl>
-              <FormLabel>Versions <RequiredSpan /></FormLabel>
-              <Select onChange={(e) => {
+              <FormLabel>Versions <RequireSpan /></FormLabel>
+              <Select {...register('packageManagerVersion')} onChange={(e) => {
                 setLanguageVersion(e.target.value)
               }} defaultValue={packageManager!.package.versions[0]}>
                 {packageManager.package.versions.map((version => (
                   <option key={version} value={version}>{version}</option>
                 )))}
               </Select>
+              {errors.packageManagerVersion?.message && <FormErrorMessage>{errors.packageManagerVersion?.message}</FormErrorMessage>}
             </FormControl>
           </Box>
         )}
         {mode == Mode.Single && !!packageManager && (
-          <SinglePackageSelection />
+          <SinglePackageSelection errors={errors} register={register} packageManager={packageManager} />
         )}
         {mode == Mode.Multiple && !!packageManager && (
-          <Box>
-            <FormControl>
-              <FormLabel>Upload your package (Optional)</FormLabel>
-              <Input type='file' multiple={false} onChange={(e) => {
-                if (e.target.files == null) return;
-
-                const file = e.target.files[0];
-
-                if (file) {
-                  const reader = new FileReader();
-
-                  reader.onload = (e) => {
-                    const format = e.target!.result;
-                    if (format == null) return;
-
-                    const newPackageManager = { ...packageManager };
-                    newPackageManager.package.format = format as string;
-                    setPackageManager(newPackageManager);
-                  };
-                  reader.readAsText(file);
-                }
-              }} />
-            </FormControl>
-          </Box>
+          <FileSelection setPackageManager={setPackageManager} packageManager={packageManager} />
         )}
       </SimpleGrid>
 
@@ -123,61 +164,8 @@ export default function Page() {
         <Editore key={packageManager.package.format} editorRef={editorRef} packageManager={packageManager} setIsValid={setIsValid} />
       )}
       <Box mt={10}>
-        <Button onClick={async () => {
-          toast({
-            title: 'Your request has been reach to server!',
-            description: "Waiting to finalization...",
-            status: 'success',
-            duration: 9000,
-            isClosable: true,
-          })
-          const res = await download(packageManager!.name.toLowerCase(),
-            languageVersion!,
-            editorRef.current!.getValue())
-          if (res.isSuccess) {
-            toast({
-              title: 'Package has been added',
-              description: "Successfully is completed.",
-              status: 'success',
-              duration: 9000,
-              isClosable: true,
-            })
-          } else {
-            toast({
-              title: 'Error',
-              description: "",
-              status: 'error',
-              duration: 9000,
-              isClosable: true,
-            })
-          }
-        }} isDisabled={!!isValid} visibility={!!!packageManager ? "hidden" : "visible"}>Download</Button>
+        <Button type="submit" isDisabled={!!isValid} visibility={!!!packageManager ? "hidden" : "visible"}>Download</Button>
       </Box>
-    </Box>
+    </form>
   )
 }
-
-const SinglePackageSelection = () => {
-  return (
-    <>
-      <Box>
-        <FormControl>
-          <FormLabel>Package name <RequiredSpan /></FormLabel>
-          <Input type='text' />
-          <FormHelperText>such as Flask, React, Pandas, etc.</FormHelperText>
-        </FormControl>
-      </Box>
-      <Box ml={5}>
-        <FormControl>
-          <FormLabel>Version of package <RequiredSpan /></FormLabel>
-          <Input type='text' />
-          <FormHelperText></FormHelperText>
-        </FormControl>
-      </Box>
-    </>
-  )
-}
-
-const RequiredSpan = () => (
-  <span style={{ color: 'red', fontWeight: 'bold' }}>*</span>
-)

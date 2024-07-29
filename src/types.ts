@@ -17,3 +17,12 @@ export interface ApiResponse {
     isSuccess: boolean
     message: string
 }
+
+export interface Form {
+    mode: Mode;
+    packageManager: string;
+    packageManagerVersion: string;
+    packageName?: string
+    packageVersion?: string;
+    groupId?: string;
+}
